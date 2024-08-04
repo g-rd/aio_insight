@@ -159,6 +159,3 @@ from the [Atlassian Python API](https://github.com/atlassian-api/atlassian-pytho
 which is licensed under the Apache License 2.0. 
 The original project inspired the asynchronous reimplementation of its methods.
 
-```# aio_insight
-# aio_insight
-# aio_insight
