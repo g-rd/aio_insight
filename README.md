@@ -1,8 +1,8 @@
-# AsyncQueryInsight
+# AIOInsight
 
 ## Overview
 
-`AsyncQueryInsight` is a Python library designed to interact with Jira Insight's API asynchronously. 
+`AIOInsight` is a Python library designed to interact with Jira Insight's API asynchronously. 
 This library leverages Python's `asyncio` and `httpx` to efficiently query and retrieve data from Jira Insight, 
 supporting asynchronous fetching of paginated data, schema processing, and concurrent request management.
 It is ideal for applications that require high-performance data access and manipulation from Jira Insight.
