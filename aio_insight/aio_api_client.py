@@ -183,7 +183,7 @@ class AsyncAtlasRestAPI:
                 response.raise_for_status()
             else:
                 log.error(response.content)  # Log the error message
-                raise HTTPError(response.content, response=response)  # Include error_msg in the exception
+                raise HTTPError(error_msg)  # Include error_msg in the exception
 
     async def request(
             self,
