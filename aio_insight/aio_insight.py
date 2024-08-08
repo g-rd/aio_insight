@@ -2,8 +2,7 @@ import logging
 
 import aiofiles
 
-from aio_api_client import RateLimitedAsyncAtlassianRestAPI
-
+from aio_insight.aio_api_client import RateLimitedAsyncAtlassianRestAPI
 
 log = logging.getLogger(__name__)
 
