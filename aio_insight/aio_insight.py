@@ -597,6 +597,25 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "object/{id}/referenceinfo".format(id=object_id))
         return await self.get(url)
 
+    async def get_status_types(self, object_schema_id=None):
+        """
+        Retrieves status types for a given object schema ID.
+
+        Args:
+            object_schema_id (int, optional): The ID of the object schema. If not provided,
+                                              it will return all global statuses.
+
+        Returns:
+            list: A list of status type objects.
+        """
+        url = self.url_joiner(self.api_root, "config/statustype")
+
+        params = {}
+        if object_schema_id is not None:
+            params['objectSchemaId'] = object_schema_id
+
+        return await self.get(url, params=params)
+
     async def create_object(self, object_type_id, attributes, has_avatar=False, avatar_uuid=""):
         """
         Creates a new object with the specified attributes.
