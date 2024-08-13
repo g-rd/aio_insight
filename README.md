@@ -1,4 +1,4 @@
-# AIOInsight - and Async JIra Insight/Assets Client
+# AIOInsight - and Async Jira Insight/Assets Client
 
 ## Overview
 
