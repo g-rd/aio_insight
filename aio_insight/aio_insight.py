@@ -5,6 +5,7 @@ import aiofiles
 from aio_insight.aio_api_client import RateLimitedAsyncAtlassianRestAPI
 
 log = logging.getLogger(__name__)
+from icecream import ic
 
 
 class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
@@ -276,7 +277,8 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             self.api_root,
             f"objectschema/{schema_id}"
         )
-        return await self.get(url)
+        result = await self.get(url)
+        return result
 
     async def get_object_schema_object_types(self, schema_id):
         """
@@ -457,7 +459,8 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         """
 
         url = self.url_joiner(self.api_root, "object/{id}".format(id=object_id))
-        return await self.get(url)
+        result = await self.get(url)
+        return result
 
     async def get_object_type_attributes(
             self,
@@ -614,7 +617,8 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         if object_schema_id is not None:
             params['objectSchemaId'] = object_schema_id
 
-        return await self.get(url, params=params)
+        result = await self.get(url, params=params)
+        return result
 
     async def create_object(self, object_type_id, attributes, has_avatar=False, avatar_uuid=""):
         """

@@ -1,0 +1,6 @@
+venv
+creds.py
+.idea
+*.pyc
+*.json
+*.db
