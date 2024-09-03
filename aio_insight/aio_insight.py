@@ -1,11 +1,11 @@
 import logging
+from typing import List, Dict
 
 import aiofiles
 
 from aio_insight.aio_api_client import RateLimitedAsyncAtlassianRestAPI
 
 log = logging.getLogger(__name__)
-from icecream import ic
 
 
 class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
@@ -30,6 +30,8 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             **kwargs: Arbitrary keyword arguments. 'cloud' key indicates cloud-based operation.
         """
 
+        self.no_check_headers = None
+        self.experimental_headers = None
         kwargs["api_root"] = "rest/insight/1.0"
         self.cloud = kwargs.pop("cloud", False)
 
@@ -121,12 +123,12 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         )
         return await self.get(url)
 
-    async def upload_attachment_to_object(self, object_id, filename):
+    async def upload_attachment_to_object(self, object_id: int, filename: str) -> Dict[str, str]:
         """
         Uploads an attachment to a specified object.
 
         Args:
-            object_id (str): The ID of the object to attach the file to.
+            object_id (int): The ID of the object to attach the file to.
             filename (str): The path to the file to be uploaded.
 
         Returns:
@@ -141,12 +143,12 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             files = {"file": await attachment.read()}
             return await self.post(url, headers=self.no_check_headers, files=files)
 
-    async def delete_attachment(self, attachment_id):
+    async def delete_attachment(self, attachment_id: int) -> Dict[str, str]:
         """
         Deletes an attachment based on the provided attachment ID.
 
         Args:
-            attachment_id (str): The ID of the attachment to be deleted.
+            attachment_id (int): The ID of the attachment to be deleted.
 
         Returns:
             dict: The response from the API after deleting the attachment.
@@ -158,13 +160,13 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = "rest/insight/1.0/attachments/{attachmentId}".format(attachmentId=attachment_id)
         return await self.delete(url)
 
-    async def add_comment_to_object(self, comment, object_id, role):
+    async def add_comment_to_object(self, comment: str, object_id: int, role: str) -> Dict[str, str]:
         """
         Adds a comment to a specified object.
 
         Args:
             comment (str): The comment text to be added.
-            object_id (str): The ID of the object to add the comment to.
+            object_id (int): The ID of the object to add the comment to.
             role (str): The role associated with the comment.
 
         Returns:
@@ -182,7 +184,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         Retrieves comments for a specified object ID.
 
         Args:
-            object_id (str): The ID of the object to retrieve comments for.
+            object_id (int): The ID of the object to retrieve comments for.
 
         Returns:
             list: A list of comments associated with the object.
@@ -193,12 +195,12 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = "rest/insight/1.0/comment/object/{objectId}".format(objectId=object_id)
         return await self.get(url)
 
-    async def get_icon_by_id(self, icon_id):
+    async def get_icon_by_id(self, icon_id) -> Dict[str, str]:
         """
         Retrieves information about an icon by its ID.
 
         Args:
-            icon_id (str): The ID of the icon.
+            icon_id (int): The ID of the icon.
 
         Returns:
             dict: Icon information.
@@ -207,7 +209,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "icon/{id}".format(id=icon_id))
         return await self.get(url)
 
-    async def get_all_global_icons(self):
+    async def get_all_global_icons(self) -> Dict[str, str]:
         """
         Retrieves information about all global icons.
 
@@ -218,12 +220,12 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "icon/global")
         return await self.get(url)
 
-    async def start_import_configuration(self, import_id):
+    async def start_import_configuration(self, import_id: int) -> Dict[str, str]:
         """
         Starts the import process for a given import configuration.
 
         Args:
-            import_id (str): The ID of the import configuration.
+            import_id (int): The ID of the import configuration.
 
         Returns:
             dict: The response from the API after starting the import.
@@ -235,7 +237,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         )
         return await self.post(url)
 
-    async def reindex_insight(self):
+    async def reindex_insight(self) -> Dict[str, str]:
         """
         Initiates reindexing of Insight.
 
@@ -248,7 +250,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "index/reindex/start")
         return await self.post(url)
 
-    async def reindex_current_node_insight(self):
+    async def reindex_current_node_insight(self) -> Dict[str, str]:
         """
         Initiates reindexing of the current node in Insight.
 
@@ -261,7 +263,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "index/reindex/currentnode")
         return await self.post(url)
 
-    async def get_object_schema(self, schema_id):
+    async def get_object_schema(self, schema_id: int) -> Dict[str, str]:
         """
         Retrieves information about an object schema based on its ID.
 
@@ -280,7 +282,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         result = await self.get(url)
         return result
 
-    async def get_object_schema_object_types(self, schema_id):
+    async def get_object_schema_object_types(self, schema_id: int) -> List[Dict[str, str]]:
         """
         Retrieves all object types for a given object schema.
 
@@ -298,7 +300,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         )
         return await self.get(url)
 
-    async def get_object_schema_object_types_flat(self, schema_id):
+    async def get_object_schema_object_types_flat(self, schema_id: int) -> List[Dict[str, str]]:
         """
         Retrieves all object types for a given object schema in a flat structure.
 
@@ -364,18 +366,18 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
 
     async def iql(
             self,
-            iql,
-            object_schema_id=None,
-            page=1,
-            order_by_attribute_id=None,
-            order_asc=True,
-            result_per_page=25,
-            include_attributes=True,
-            include_attributes_deep=1,
-            include_type_attributes=False,
-            include_extended_info=False,
-            extended=None,
-    ):
+            iql: str,
+            object_schema_id: int = None,
+            page: int =1,
+            order_by_attribute_id: int = None,
+            order_asc: bool = True,
+            result_per_page: int = 25,
+            include_attributes: bool = True,
+            include_attributes_deep: int = 1,
+            include_type_attributes: bool = False,
+            include_extended_info: bool = False,
+            extended: Dict[str, str] = None,
+    ) -> Dict[str, str]:
         """
         Executes an Insight Query Language (IQL) query to fetch objects.
 
@@ -419,16 +421,28 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "iql/objects")
         return await self.get(url, params=params)
 
-    async def get_objects_by_aql(self, schema_id, object_type_id, aql_query, page=1, asc=1, results_per_page=25):
+    async def get_objects_by_aql(
+            self,
+            schema_id: int,
+            object_type_id: int,
+            aql_query: str,
+            page: int = 1,
+            asc: int = 1,
+            results_per_page: int = 25
+    ) -> Dict[str, str]:
         """
-        Retrieves a list of objects based on an AQL query.
+        Retrieves a list of objects based on an AQL (Advanced Query Language) query.
 
         Args:
-
-            ql_query (str): The AQL query.
+            schema_id (int): The ID of the schema to which the object type belongs.
+            object_type_id (int): The ID of the object type to query.
+            aql_query (str): The AQL query string.
+            page (int, optional): The page number to retrieve (default is 1).
+            asc (int, optional): Sort order (1 for ascending, 0 for descending; default is 1).
+            results_per_page (int, optional): Number of results per page (default is 25).
 
         Returns:
-            dict: The response from the API.
+            dict: The response from the API, containing the list of objects matching the query.
         """
 
         url = self.url_joiner(self.api_root, "/object/navlist/aql")
@@ -447,7 +461,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         log.debug(f"Sending AQL query to URL: {url}")
         return await self.post(url, json=body)
 
-    async def get_object(self, object_id):
+    async def get_object(self, object_id: int) -> Dict[str, str]:
         """
         Retrieves information about a specific object by its ID.
 
@@ -464,15 +478,15 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
 
     async def get_object_type_attributes(
             self,
-            object_id,
-            only_value_editable=False,
-            order_by_name=False,
-            query=None,
-            include_value_exist=False,
-            exclude_parent_attributes=False,
-            include_children=True,
-            order_by_required=False
-    ):
+            object_id: int,
+            only_value_editable: bool = False,
+            order_by_name: bool = False,
+            query: str = None,
+            include_value_exist: bool = False,
+            exclude_parent_attributes: bool = False,
+            include_children: bool = True,
+            order_by_required: bool = False
+    ) -> Dict[str, str]:
         """
         Fetches all object type attributes for a given object type.
 
@@ -512,11 +526,11 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
 
     async def update_object(
         self,
-        object_id,
-        object_type_id,
-        attributes,
-        has_avatar=False,
-        avatar_uuid="",
+        object_id: int,
+        object_type_id: int,
+        attributes: List[Dict],
+        has_avatar: bool = False,
+        avatar_uuid: str = "",
     ):
         """
         Updates an object with new data.
@@ -541,7 +555,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "object/{id}".format(id=object_id))
         return await self.put(url, data=body)
 
-    async def delete_object(self, object_id):
+    async def delete_object(self, object_id: int) -> Dict[str, str]:
         """
         Deletes an object based on its ID.
 
@@ -555,7 +569,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "object/{id}".format(id=object_id))
         return await self.delete(url)
 
-    async def get_object_attributes(self, object_id):
+    async def get_object_attributes(self, object_id: int) -> Dict[str, str]:
         """
         Retrieves attributes of an object.
 
@@ -569,7 +583,12 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "object/{id}/attributes".format(id=object_id))
         return await self.get(url)
 
-    async def get_object_history(self, object_id, asc=False, abbreviate=True):
+    async def get_object_history(
+            self,
+            object_id: int,
+            asc: bool = False,
+            abbreviate: bool = True
+    ) -> Dict[str, str]:
         """
         Fetches the history of an object.
 
@@ -586,7 +605,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "object/{id}/history".format(id=object_id))
         return await self.get(url, params=params)
 
-    async def get_object_reference_info(self, object_id):
+    async def get_object_reference_info(self, object_id: int) -> Dict[str, str]:
         """
         Retrieves reference information for an object.
 
@@ -600,7 +619,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "object/{id}/referenceinfo".format(id=object_id))
         return await self.get(url)
 
-    async def get_status_types(self, object_schema_id=None):
+    async def get_status_types(self, object_schema_id: int = None) -> Dict[str, str]:
         """
         Retrieves status types for a given object schema ID.
 
@@ -620,13 +639,19 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         result = await self.get(url, params=params)
         return result
 
-    async def create_object(self, object_type_id, attributes, has_avatar=False, avatar_uuid=""):
+    async def create_object(
+            self,
+            object_type_id: int,
+            attributes: List[Dict[str, str]],
+            has_avatar: bool = False,
+            avatar_uuid: str = ""
+    ) -> Dict[str, str]:
         """
         Creates a new object with the specified attributes.
 
         Args:
             object_type_id (int): The ID of the object type for the new object.
-            attributes (dict): A dictionary of attributes for the new object.
+            attributes (List[dict]): A dictionary of attributes for the new object.
             has_avatar (bool): Indicates if the object has an avatar. Defaults to False.
             avatar_uuid (str): The UUID of the avatar, if applicable. Defaults to an empty string.
 
