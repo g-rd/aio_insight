@@ -3,7 +3,7 @@ from typing import List, Dict
 
 import aiofiles
 
-from aio_insight.aio_api_client import RateLimitedAsyncAtlassianRestAPI
+from aio_insight.aio_api_client import RateLimitedAsyncAtlassianRestAPI, RateLimiter
 
 log = logging.getLogger(__name__)
 
@@ -21,14 +21,11 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
     """
 
     def __init__(self, *args, **kwargs):
-        """
-        Initializes the AsyncInsight class, setting up the API root and preparing for either cloud or non-cloud
-        interactions based on provided arguments.
+        # Create a default rate limiter: 10 requests per second
+        default_rate_limiter = RateLimiter(tokens=10, interval=1)
 
-        Args:
-            *args: Variable length argument list, passed to the superclass constructor.
-            **kwargs: Arbitrary keyword arguments. 'cloud' key indicates cloud-based operation.
-        """
+        # Use the provided rate_limiter if one is given, otherwise use the default
+        rate_limiter = kwargs.pop('rate_limiter', default_rate_limiter)
 
         self.no_check_headers = None
         self.experimental_headers = None
@@ -42,6 +39,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
 
         super().__init__(
             *args,
+            rate_limiter=rate_limiter,
             max_connections=max_connections,
             max_keepalive_connections=max_keepalive_connections,
             keepalive_expiry=keepalive_expiry,
@@ -263,6 +261,23 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "index/reindex/currentnode")
         return await self.post(url)
 
+    async def get_object_schemas(self) -> Dict[str, str]:
+        """
+        Retrieves information about an object schema based on its ID.
+
+        Returns:
+            dict: The details of the specified object schema.
+        """
+
+        # Assuming the URL to get object types is similar to the one for getting object schema
+        url = self.url_joiner(
+            self.api_root,
+            f"objectschema/list"
+        )
+        result = await self.get(url)
+        return result
+
+
     async def get_object_schema(self, schema_id: int) -> Dict[str, str]:
         """
         Retrieves information about an object schema based on its ID.
@@ -281,6 +296,40 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         )
         result = await self.get(url)
         return result
+
+
+    async def create_object_schema(self, name: str, description: str) -> Dict[str, str]:
+        """
+        Creates a new object schema with the specified name and description.
+
+        Args:
+            name (str): The name of the new object schema.
+            description (str): The description of the new object schema.
+
+        Returns:
+            dict: The response from the API after creating the object schema.
+        """
+
+        url = self.url_joiner(self.api_root, "objectschema/create")
+        body = {"name": name, "description": description}
+        return await self.post(url, json=body)
+
+    async def update_object_schema(self, schema_id: int, name: str, description: str) -> Dict[str, str]:
+        """
+        Updates an object schema based on the provided schema ID.
+
+        Args:
+            schema_id (int): The ID of the object schema to update.
+            name (str): The new name for the object schema.
+            description (str): The new description for the object schema.
+
+        Returns:
+            dict: The response from the API after updating the object schema.
+        """
+
+        url = self.url_joiner(self.api_root, "objectschema/{id}".format(id=schema_id))
+        body = {"name": name, "description": description}
+        return await self.put(url, json=body)
 
     async def get_object_schema_object_types(self, schema_id: int) -> List[Dict[str, str]]:
         """
@@ -362,6 +411,50 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         # Remove parameters with default values or None
         params = {k: v for k, v in params.items() if v not in (False, None)}
 
+        return await self.get(url, params=params)
+
+    async def aql_query(
+            self,
+            ql_query: str = None,
+            page: int = 1,
+            result_per_page: int = 25,
+            include_attributes: bool = True,
+            include_attributes_deep: int = 1,
+            include_type_attributes: bool = False,
+            include_extended_info: bool = False,
+            object_schema_id: str = None
+    ) -> dict:
+        """
+        Runs an AQL query and fetches the results from the Insight API.
+
+        Args:
+            ql_query (str, optional): The query to determine which objects should be fetched. Defaults to None.
+            page (int, optional): The page to fetch when paginating through the response. Defaults to 1.
+            result_per_page (int, optional): The number of objects returned per page. Defaults to 25.
+            include_attributes (bool, optional): Should object attributes be included in the response. Defaults to True.
+            include_attributes_deep (int, optional): How many levels of attributes should be included in the response. Defaults to 1.
+            include_type_attributes (bool, optional): Should the response include the object type attribute definition for each attribute. Defaults to False.
+            include_extended_info (bool, optional): Should the response include information about open issues and attachments. Defaults to False.
+            object_schema_id (str, optional): Limit the scope of objects to find based on this schema. Defaults to None.
+
+        Returns:
+            dict: The API response containing the queried objects.
+        """
+
+        params = {
+            "qlQuery": ql_query if ql_query else "objectType IS NOT EMPTY",
+            "page": page,
+            "resultPerPage": result_per_page,
+            "includeAttributes": include_attributes,
+            "includeAttributesDeep": include_attributes_deep,
+            "includeTypeAttributes": include_type_attributes,
+            "includeExtendedInfo": include_extended_info
+        }
+
+        if object_schema_id:
+            params["objectSchemaId"] = object_schema_id
+
+        url = self.url_joiner(self.api_root, "iql/objects")
         return await self.get(url, params=params)
 
     async def iql(

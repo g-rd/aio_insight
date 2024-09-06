@@ -2,40 +2,39 @@ import asyncio
 import time
 import logging
 from json import dumps
-from typing import Optional, Dict, Tuple, Any, Union, FrozenSet
+from typing import Optional, Dict, Tuple, Any, Union, FrozenSet, List
 
 import httpx
 from httpx import Response, AsyncClient, Limits, HTTPError
 
 from six.moves.urllib.parse import urlencode
 
+CacheKeyType = Tuple[str, FrozenSet[Tuple[str, Union[str, Tuple[str, str]]]], FrozenSet[Tuple[str, Union[str, Tuple[str, str]]]]]
+
 # Configure logging
 log = logging.getLogger(__name__)
 
 
 class RateLimiter:
-    def __init__(self, tokens, interval):
+    def __init__(self, tokens: int, interval: float):
         self.tokens = tokens
-        self.capacity = tokens
         self.interval = interval
-        self.last_check = time.monotonic()
+        self.next_available = time.monotonic()
+        self.lock = asyncio.Lock()
 
-    async def get_token(self):
-        current_time = time.monotonic()
-        time_elapsed = current_time - self.last_check
+    async def acquire(self):
+        async with self.lock:
+            now = time.monotonic()
+            if now < self.next_available:
+                await asyncio.sleep(self.next_available - now)
+            self.next_available = max(now, self.next_available) + self.interval / self.tokens
 
-        self.tokens += time_elapsed * (self.capacity / self.interval)
-        self.tokens = min(self.tokens, self.capacity)
+    async def __aenter__(self):
+        await self.acquire()
+        return self
 
-        if self.tokens < 1:
-            sleep_time = (1 - self.tokens) * (self.interval / self.capacity)
-            await asyncio.sleep(sleep_time)
-            self.tokens -= 1
-        else:
-            self.tokens -= 1
-
-        self.last_check = time.monotonic()
-
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
 
 class AsyncAtlasRestAPI:
     default_headers = {
@@ -211,16 +210,6 @@ class AsyncAtlasRestAPI:
 
         if files is None:
             data = dumps(data) if data is not None else None
-            json_dump = dumps(json) if json is not None else None
-        else:
-            json_dump = None
-
-        # self.log_curl_debug(
-        #     method=method,
-        #     url=url,
-        #     headers=headers,
-        #     data=data if data else json_dump,
-        # )
 
         headers = headers or self.default_headers
 
@@ -231,7 +220,7 @@ class AsyncAtlasRestAPI:
                 url=url,
                 headers=headers,
                 data=data,
-                json=json,
+                json=json,  # Pass json directly to the request method
                 files=files,
             )
             response.encoding = "utf-8"
@@ -254,19 +243,24 @@ class AsyncAtlasRestAPI:
 
     async def get(
             self,
-            path,
-            data=None,
-            flags=None,
-            params=None,
-            headers=None,
-            not_json_response=None,
-            trailing=None,
-            absolute=False,
-            advanced_mode=False,
-            use_cache=True
-    ):
+            path: str,
+            data: Optional[Dict[str, Any]] = None,
+            flags: Optional[Dict[str, Any]] = None,
+            params: Optional[Dict[str, Any]] = None,
+            headers: Optional[Dict[str, str]] = None,
+            not_json_response: bool = False,
+            trailing: Optional[str] = None,
+            absolute: bool = False,
+            advanced_mode: bool = False,
+            use_cache: bool = True
+    ) -> Any:
         # Create a unique cache key based on the path and parameters
-        cache_key = (path, frozenset(params.items()) if params else None)
+        param_set = frozenset(
+            (k, v) if isinstance(v, (str, int, float, bool)) else (
+            k, tuple(v) if isinstance(v, (list, tuple)) else str(v))
+            for k, v in (params or {}).items()
+        )
+        cache_key: CacheKeyType = (path, param_set, param_set)
 
         # Check if a cached response is available and valid
         if use_cache and cache_key in self.cache:
@@ -287,23 +281,26 @@ class AsyncAtlasRestAPI:
             absolute=absolute,
             advanced_mode=advanced_mode,
         )
+
+        # Return the parsed or raw response based on flags
         if self.advanced_mode or advanced_mode:
             return response
+
         if not_json_response:
             return response.content
-        else:
-            if not response.text:
-                return None
-            try:
-                # Parse the JSON response
-                json_response = response.json()
-                if use_cache:
-                    # Cache the JSON response
-                    self.cache[cache_key] = (json_response, time.monotonic())
-                return json_response
-            except Exception as e:
-                log.error(e)
-                return response.text
+
+        if not response.text:
+            return None
+
+        try:
+            json_response = response.json()
+            if use_cache:
+                # Cache the JSON response
+                self.cache[cache_key] = (json_response, time.monotonic())
+            return json_response
+        except Exception as e:
+            log.error("Error parsing JSON response: %s", str(e))
+            return response.text
 
     async def post(
             self,
@@ -337,6 +334,7 @@ class AsyncAtlasRestAPI:
             self,
             path,
             data=None,
+            json=None,
             headers=None,
             files=None,
             trailing=None,
@@ -348,6 +346,7 @@ class AsyncAtlasRestAPI:
             "PUT",
             path=path,
             data=data,
+            json=json,
             headers=headers,
             files=files,
             params=params,
@@ -422,6 +421,7 @@ class RateLimitedAsyncAtlassianRestAPI(AsyncAtlasRestAPI):
 
     async def request(self, *args, **kwargs):
         if self.rate_limiter:
-            await self.rate_limiter.get_token()
-        return await super().request(*args, **kwargs)
-
+            async with self.rate_limiter:
+                return await super().request(*args, **kwargs)
+        else:
+            return await super().request(*args, **kwargs)
