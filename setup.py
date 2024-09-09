@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="aio-insight",  # The package name
-    version="0.1.5",  # Initial version number
+    version="0.1.6",  # Initial version number
     author="Gerd Kukemilk",
     author_email="",
     description="A Python library for asynchronous querying of Jira Insight API.",
