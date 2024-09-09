@@ -22,7 +22,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
 
     def __init__(self, *args, **kwargs):
         # Create a default rate limiter: 10 requests per second
-        default_rate_limiter = RateLimiter(tokens=10, interval=1)
+        default_rate_limiter = RateLimiter(tokens=40, interval=1)
 
         # Use the provided rate_limiter if one is given, otherwise use the default
         rate_limiter = kwargs.pop('rate_limiter', default_rate_limiter)
