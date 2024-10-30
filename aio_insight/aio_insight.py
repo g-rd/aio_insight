@@ -1,6 +1,6 @@
 import logging
-from typing import List, Dict
-
+from typing import List, Dict, Any
+from httpx import HTTPError
 import aiofiles
 
 from aio_insight.aio_api_client import RateLimitedAsyncAtlassianRestAPI, RateLimiter
@@ -441,21 +441,22 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             dict: The API response containing the queried objects.
         """
 
-        params = {
-            "qlQuery": ql_query if ql_query else "objectType IS NOT EMPTY",
-            "page": page,
-            "resultPerPage": result_per_page,
-            "includeAttributes": include_attributes,
-            "includeAttributesDeep": include_attributes_deep,
-            "includeTypeAttributes": include_type_attributes,
-            "includeExtendedInfo": include_extended_info
-        }
+        try:
+            return await self.get_objects_by_aql(
+                schema_id=int(object_schema_id) if object_schema_id else None,
+                object_type_id=int(object_schema_id) if object_schema_id else None,
+                aql_query=ql_query,
+                page=page,
+                results_per_page=result_per_page,
+                include_attributes=include_attributes
+            )
 
-        if object_schema_id:
-            params["objectSchemaId"] = object_schema_id
+        except HTTPError as e:
+            log.error(f"Error fetching objects: {e}")
+            return {}
 
-        url = self.url_joiner(self.api_root, "iql/objects")
-        return await self.get(url, params=params)
+        finally:
+            raise DeprecationWarning("This method is deprecated. Use the get_object_by_aql method instead.")
 
     async def iql(
             self,
@@ -471,48 +472,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             include_extended_info: bool = False,
             extended: Dict[str, str] = None,
     ) -> Dict[str, str]:
-        """
-        Executes an Insight Query Language (IQL) query to fetch objects.
-
-        Args:
-            iql (str): The IQL query.
-            object_schema_id (int, optional): The schema ID to limit the scope of objects. Defaults to None.
-            page (int, optional): The page number for pagination. Defaults to 1.
-            order_by_attribute_id (int, optional): The attribute ID for ordering results. Defaults to None.
-            order_asc (bool, optional): If True, sorts results in ascending order. Defaults to True.
-            result_per_page (int, optional): The number of results per page. Defaults to 25.
-            include_attributes (bool, optional): If True, includes object attributes in the response. Defaults to True.
-            include_attributes_deep (int, optional): The depth of attributes to include. Defaults to 1.
-            include_type_attributes (bool, optional): If True, includes the object type attribute definition. Defaults to False.
-            include_extended_info (bool, optional): If True, includes information about open issues and attachments. Defaults to False.
-            extended (dict, optional): Additional parameters for extended information. Defaults to None.
-
-        Returns:
-            dict: The result of the IQL query.
-        """
-
-        params = {
-            "iql": iql,
-            "page": page,
-            "resultPerPage": result_per_page,
-            "includeAttributes": include_attributes,
-            "includeAttributesDeep": include_attributes_deep,
-            "includeTypeAttributes": include_type_attributes,
-            "includeExtendedInfo": include_extended_info,
-        }
-
-        # Add deprecated parameters if they're provided
-        if object_schema_id:
-            params["objectSchemaId"] = object_schema_id
-        if order_by_attribute_id:
-            params["orderByAttributeId"] = order_by_attribute_id
-        if order_asc is not None:
-            params["orderAsc"] = order_asc
-        if extended is not None:
-            params["extended"] = extended
-
-        url = self.url_joiner(self.api_root, "iql/objects")
-        return await self.get(url, params=params)
+        raise DeprecationWarning("This method is deprecated. Use the get_objects_by_aql method instead.")
 
     async def get_objects_by_aql(
             self,
@@ -520,39 +480,46 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             object_type_id: int,
             aql_query: str,
             page: int = 1,
-            asc: int = 1,
-            results_per_page: int = 25
-    ) -> Dict[str, str]:
+            results_per_page: int = 25,
+            include_attributes: bool = True,
+    ) -> Dict[str, Any]:
         """
-        Retrieves a list of objects based on an AQL (Advanced Query Language) query.
+        Retrieves a list of objects based on an AQL query.
 
         Args:
-            schema_id (int): The ID of the schema to which the object type belongs.
-            object_type_id (int): The ID of the object type to query.
-            aql_query (str): The AQL query string.
-            page (int, optional): The page number to retrieve (default is 1).
-            asc (int, optional): Sort order (1 for ascending, 0 for descending; default is 1).
-            results_per_page (int, optional): Number of results per page (default is 25).
+            schema_id (int): The ID of the schema
+            object_type_id (int): The ID of the object type
+            aql_query (str): The AQL query string
+            page (int, optional): The page number (default is 1)
+            results_per_page (int, optional): Number of results per page (default is 25)
 
         Returns:
-            dict: The response from the API, containing the list of objects matching the query.
+            dict: The response containing matching objects
         """
+        # All parameters go in the query string for GET request
+        query = {
+            'includeAttributes': True,
+        }
 
-        url = self.url_joiner(self.api_root, "/object/navlist/aql")
-        body = {
+        log.debug(f"Query parameters: {query}")
+
+        payload = {
             "objectTypeId": object_type_id,
-            "attributesToDisplay": {
-                "attributesToDisplayIds": []
-            },
             "page": page,
-            "asc": asc,
+            "asc": 1,
             "resultsPerPage": results_per_page,
-            "includeAttributes": False,
+            "includeAttributes": include_attributes,
             "objectSchemaId": schema_id,
             "qlQuery": aql_query
         }
-        log.debug(f"Sending AQL query to URL: {url}")
-        return await self.post(url, json=body)
+
+
+        result = await self.post(
+            "rest/insight/1.0/object/navlist/aql",
+            json=payload
+        )
+        return result
+
 
     async def get_object(self, object_id: int) -> Dict[str, str]:
         """
