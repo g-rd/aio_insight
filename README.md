@@ -1,161 +1,215 @@
-# AIOInsight - and Async Jira Insight/Assets Client
-
-## Overview
-
-`AIOInsight` is a Python library designed to interact with Jira Insight's API asynchronously. 
-This library leverages Python's `asyncio` and `httpx` to efficiently query and retrieve data from Jira Insight, 
-supporting asynchronous fetching of paginated data, schema processing, and concurrent request management.
-It is ideal for applications that require high-performance data access and manipulation from Jira Insight.
-
-
-This project is based on the [Atlassian Python API](https://github.com/atlassian-api/atlassian-python-api), 
-with methods rewritten to support asynchronous operations, providing improved performance and scalability.
-
-## Features
-
-- **Asynchronous Data Fetching:** Utilizes Python's `asyncio` and `httpx` for concurrent HTTP requests, ensuring high throughput and minimal latency.
-- **Comprehensive API Interaction:** Provides methods for executing IQL (Insight Query Language) queries, retrieving object schemas, and handling complex data models.
-- **Error Handling:** Includes custom exceptions for robust error reporting and handling.
-- **Configurable Parameters:** Allows customization of settings like page size, schema ID, and concurrent request limits.
-- **Schema Processing:** Automatically processes schemas for object attributes, supporting detailed data models in Insight.
-
-## Installation
-
-Ensure you have Python 3.7+ installed. You can install the required dependencies via pip:
-
-```bash
-pip install httpx
-```
-
-## Usage
-
-Below are examples of how to use the `AsyncQueryInsight` class and its methods.
-
-### Using `AsyncQueryInsight`
-
-The `AsyncQueryInsight` class is the primary interface for querying Jira Insight data asynchronously. Here's an example of how to set it up and fetch data:
-
-```python
-import asyncio
-from aio_insight.aio_query_insight import AsyncQueryInsight, PageFetchError
-
-
-async def main():
-    # Initialize AsyncQueryInsight with necessary parameters
-    query_insight = AsyncQueryInsight(
-        url="https://your-jira-instance.atlassian.net",
-        token="your-api-token",
-        query="objectType = 'Hardware'",  # Example IQL query
-        schema_id=1234,  # Optional, specify your schema ID
-        page_size=50  # Optional, defaults to 20
-    )
-
-    try:
-        # Fetch data pages asynchronously
-        pages = await query_insight.fetch_pages()
-        for page in pages:
-            print(page)
-    except PageFetchError as e:
-        print(f"Error fetching pages: {e.message}")
-
-
-# Run the async main function
-asyncio.run(main())
-```
-
-### Using `get_object_by_aql`
-
-In addition to querying data using `fetch_pages`, you can retrieve specific objects using AQL (Asset Query Language) with the `get_object_by_aql` method:
-
-```python
-import asyncio
-from aio_insight import AsyncInsight
-
-async def get_object():
-    # Initialize the AsyncInsight client
-    insight_client = AsyncInsight(
-        url="https://your-jira-instance.atlassian.net",
-        token="your-api-token"
-    )
-
-    try:
-        # Define your AQL query
-        aql_query = "Name = 'Laptop' AND Status = 'In Use'"
-        schema_id = 1234  # Specify your schema ID
-
-        # Fetch the object using AQL
-        result = await insight_client.iql(
-            query=aql_query,
-            object_schema_id=schema_id
-        )
-
-        print("Objects found:")
-        for obj in result.get("objects", []):
-            print(obj)
-
-    except Exception as e:
-        print(f"Error retrieving objects: {e}")
-
-# Run the async function
-asyncio.run(get_object())
-```
-
-### Initialization Parameters
-
-- **url** (str): The base URL for the Jira instance.
-- **token** (str): The authentication token for accessing Jira.
-- **query** (str|None): The IQL query string to execute. Can be `None`.
-- **schema_id** (int|None): The ID of the schema to query against. Defaults to `None`.
-- **page_size** (int|None): The number of results to return per page. Defaults to `20`.
-- **rate_limiter** (RateLimiter|None): An optional rate limiter instance for managing API rate limits.
-
-### Methods
-
-- **fetch_pages()**: Fetches multiple pages of data asynchronously and returns a list of pages. 
-    Each page is a dictionary containing the data for that page.
-- **get_object_by_aql(query, schema_id)**: Retrieves specific objects based on an AQL query and schema ID.
-
-### Error Handling
-
-- **PageFetchError**: Raised when there is an issue in fetching pages from the API. Includes an informative error message.
-
-## Configuration
-
-You can customize the behavior of `AsyncQueryInsight` by modifying class-level attributes:
-
-- **PAGE_SIZE**: Default number of results per page (default: `20`).
-- **INCLUDE_ATTRIBUTES_DEEP**: Level of attribute depth to include (default: `2`).
-- **INCLUDE_TYPE_ATTRIBUTES**: Whether to include type attributes (default: `False`).
-- **CONCURRENT_REQUESTS**: Number of concurrent requests allowed (default: `20`).
-
-## Dependencies
-
-This project requires the following package:
-
-- `httpx`
-- `aiohttp` 
-- `anyio` 
-- `certifi` 
-- `h11` 
-- `httpcore` 
-- `idna` 
-- `oauthlib` 
-- `six` 
-- `sniffio`
-
-## Contributing
-
-Contributions are welcome! Please submit issues and pull requests to the
-[GitHub repository](https://github.com/yourusername/async-query-insight).
-
-## License
-
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+Here's an expanded README with detailed descriptions for each method's functionality and return values:
 
 ---
 
-This library includes methods and concepts derived 
-from the [Atlassian Python API](https://github.com/atlassian-api/atlassian-python-api),
-which is licensed under the Apache License 2.0. 
-The original project inspired the asynchronous reimplementation of its methods.
+# AIOInsight - Asynchronous Jira Insight/Assets Client
 
+## Overview
+
+`AIOInsight` is an asynchronous Python library for interacting with Jira Insight's API. It leverages `asyncio` and `httpx` for high-performance data retrieval and management, supporting complex data models, schema processing, and concurrent requests.
+
+This project is based on the Atlassian Python API, with methods rewritten to support asynchronous operations, providing improved performance and scalability.
+
+## Features
+
+- **Asynchronous Operations:** Uses `asyncio` and `httpx` for concurrent HTTP requests, ensuring high throughput.
+- **Comprehensive API Interaction:** Retrieve schemas, manage objects, and handle data models.
+- **Error Handling:** Includes custom exceptions for robust error handling.
+- **Configurable Parameters:** Allows customization of settings for optimized performance.
+- **Schema Processing:** Automates schema processing for detailed data models in Insight.
+
+## Installation
+
+Install dependencies:
+
+```bash
+pip install httpx aiohttp anyio
+```
+
+## Usage Example
+
+```python
+import asyncio
+import logging
+from aio_insight.aio_insight import AsyncInsight
+from creds import assets_token, assets_url, assets_username
+
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+async def use_aio_insight():
+    async with AsyncInsight(
+            url=assets_url,
+            username=assets_username,
+            password=assets_token,
+            cloud=True
+    ) as session:
+        object_schemas = await session.get_object_schemas()
+        print(object_schemas)
+
+if __name__ == "__main__":
+    asyncio.run(use_aio_insight())
+```
+
+## Supported API Endpoints
+
+1. **`get_object_schemas()`**
+   - **Description:** Retrieves all object schemas available in Jira Insight.
+   - **Returns:** A list of object schemas, each including details such as schema ID, name, and object types within the schema.
+
+2. **`get_object_schema(schema_id)`**
+   - **Description:** Fetches detailed information about a specific object schema by its ID.
+   - **Parameters:**
+     - `schema_id` (int): The ID of the object schema.
+   - **Returns:** A dictionary with information about the specified schema, including name, attributes, and associated object types.
+
+3. **`create_object_schema(name, description)`**
+   - **Description:** Creates a new object schema in Jira Insight.
+   - **Parameters:**
+     - `name` (str): Name for the new schema.
+     - `description` (str): Description for the new schema.
+   - **Returns:** A dictionary containing the created schema's details, such as schema ID, name, and description.
+
+4. **`update_object_schema(schema_id, name, description)`**
+   - **Description:** Updates an existing schema’s name and description.
+   - **Parameters:**
+     - `schema_id` (int): ID of the schema to update.
+     - `name` (str): New name for the schema.
+     - `description` (str): New description for the schema.
+   - **Returns:** A dictionary with updated schema information.
+
+5. **`get_object_schema_object_types(schema_id)`**
+   - **Description:** Lists all object types within a given schema.
+   - **Parameters:**
+     - `schema_id` (int): ID of the object schema.
+   - **Returns:** A list of object types, each including details like type ID, name, and attributes.
+
+6. **`get_object_schema_object_types_flat(schema_id)`**
+   - **Description:** Retrieves object types in a flat structure for a given schema.
+   - **Parameters:**
+     - `schema_id` (int): ID of the object schema.
+   - **Returns:** A list of object types without hierarchical organization, including type details.
+
+7. **`get_object_schema_object_attributes(schema_id, ...)`**
+   - **Description:** Retrieves all attributes for the specified schema, with options for filtering and sorting.
+   - **Parameters:** Additional filters such as `only_value_editable`, `order_by_name`, etc.
+   - **Returns:** A list of attributes associated with the schema, with details like attribute ID, name, type, and editability.
+
+8. **`get_object(object_id)`**
+   - **Description:** Retrieves information about a specific object by its ID.
+   - **Parameters:**
+     - `object_id` (int): The ID of the object.
+   - **Returns:** A dictionary with object details, including attributes, relationships, and type.
+
+9. **`get_objects_by_aql(schema_id, object_type_id, aql_query, ...)`**
+   - **Description:** Searches for objects based on an AQL (Asset Query Language) query.
+   - **Parameters:**
+     - `schema_id` (int): ID of the schema.
+     - `object_type_id` (int): ID of the object type.
+     - `aql_query` (str): The AQL query string.
+   - **Returns:** A paginated dictionary of matching objects, including object attributes and type details.
+
+10. **`get_object_type_attributes(object_type_id, ...)`**
+    - **Description:** Retrieves attributes for a specific object type, with options to filter or sort results.
+    - **Parameters:** Filters like `only_value_editable`, `order_by_name`, etc.
+    - **Returns:** A list of attributes associated with the object type, including details like attribute ID, type, and default values.
+
+11. **`create_object(object_type_id, attributes, ...)`**
+    - **Description:** Creates a new object with specified attributes.
+    - **Parameters:**
+      - `object_type_id` (int): ID of the object type.
+      - `attributes` (list): List of attribute dictionaries for the new object.
+    - **Returns:** A dictionary containing details of the created object, including object ID, type, and attributes.
+
+12. **`update_object(object_id, object_type_id, attributes, ...)`**
+    - **Description:** Updates an existing object with new attributes.
+    - **Parameters:** Similar to `create_object`, with an additional `object_id` for identifying the object.
+    - **Returns:** A dictionary with updated object details.
+
+13. **`delete_object(object_id)`**
+    - **Description:** Deletes an object by its ID.
+    - **Parameters:**
+      - `object_id` (int): The ID of the object to delete.
+    - **Returns:** A confirmation message or status indicating successful deletion.
+
+14. **`get_object_attributes(object_id)`**
+    - **Description:** Retrieves attributes of a specific object.
+    - **Parameters:**
+      - `object_id` (int): ID of the object.
+    - **Returns:** A dictionary with attribute details, including values, types, and other metadata.
+
+15. **`get_object_history(object_id, ...)`**
+    - **Description:** Retrieves the history of changes for a specified object.
+    - **Parameters:** Options to filter by ascending order or abbreviation.
+    - **Returns:** A list of historical changes, including date, author, and attribute modifications.
+
+16. **`get_object_reference_info(object_id)`**
+    - **Description:** Gets references to and from a specified object.
+    - **Parameters:**
+      - `object_id` (int): ID of the object.
+    - **Returns:** A dictionary of related objects and their reference types.
+
+17. **`get_status_types(object_schema_id)`**
+    - **Description:** Retrieves available status types for a schema.
+    - **Parameters:**
+      - `object_schema_id` (int): Optional schema ID for filtering status types.
+    - **Returns:** A list of status types, including status ID, name, and description.
+
+18. **`get_attachments_of_objects(object_id)`** *(Data Center only)*
+    - **Description:** Fetches attachment details for an object (not supported in Cloud).
+    - **Parameters:**
+      - `object_id` (int): ID of the object.
+    - **Returns:** A list of attachment details like attachment ID, name, and URL.
+
+19. **`upload_attachment_to_object(object_id, filename)`** *(Data Center only)*
+    - **Description:** Uploads an attachment to an object (not supported in Cloud).
+    - **Parameters:**
+      - `object_id` (int): ID of the object.
+      - `filename` (str): Path of the file to upload.
+    - **Returns:** Details of the uploaded attachment, such as attachment ID and URL.
+
+20. **`delete_attachment(attachment_id)`** *(Data Center only)*
+    - **Description:** Deletes an attachment by its ID (not supported in Cloud).
+    - **Parameters:**
+      - `attachment_id` (int): ID of the attachment.
+    - **Returns:** A confirmation of successful deletion.
+
+21. **`add_comment_to_object(comment, object_id, role)`** *(Data Center only)*
+    - **Description:** Adds a comment to an object (not supported in Cloud).
+    - **Parameters:** Comment text, object ID, and role.
+    - **Returns:** Details of the added comment.
+
+22. **`get_comment_of_object(object_id)`** *(Data Center only)*
+    - **Description:** Retrieves comments for an object (not supported in Cloud).
+    - **Parameters:** Object ID.
+    - **Returns:** A list of comments associated with the object.
+
+23. **`get_icon_by_id(icon_id)`**
+    - **Description:** Retrieves an icon's details by its ID.
+    - **Parameters:**
+      - `icon_id` (int): ID of the icon.
+    - **Returns:** Icon information including ID, name, and image data or URL.
+
+24. **`get_all_global_icons()`**
+    - **Description:** Retrieves all global icons.
+    - **Returns:** A
+
+ list of all icons available globally, including details like icon ID, name, and URL.
+
+25. **`start_import_configuration(import_id)`**
+    - **Description:** Starts an import based on a configuration ID.
+    - **Parameters:**
+      - `import_id` (int): ID of the import configuration.
+    - **Returns:** Status or confirmation of the import initiation.
+
+26. **`reindex_insight()`** *(Data Center only)*
+    - **Description:** Initiates a full reindex of Insight (not supported in Cloud).
+    - **Returns:** Confirmation of the reindex operation.
+
+27. **`reindex_current_node_insight()`** *(Data Center only)*
+    - **Description:** Reindexes the current node in Insight (not supported in Cloud).
+    - **Returns:** Confirmation of the reindex operation for the current node.
+
+---
+
+Each method’s functionality and return type is now fully described for clear understanding. Let me know if you need further adjustments!
