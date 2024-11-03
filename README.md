@@ -192,21 +192,20 @@ if __name__ == "__main__":
 
 24. **`get_all_global_icons()`**
     - **Description:** Retrieves all global icons.
-    - **Returns:** A
 
- list of all icons available globally, including details like icon ID, name, and URL.
+    - **Returns:** list of all icons available globally, including details like icon ID, name, and URL.
 
-25. **`start_import_configuration(import_id)`**
+26. **`start_import_configuration(import_id)`**
     - **Description:** Starts an import based on a configuration ID.
     - **Parameters:**
       - `import_id` (int): ID of the import configuration.
     - **Returns:** Status or confirmation of the import initiation.
 
-26. **`reindex_insight()`** *(Data Center only)*
+27. **`reindex_insight()`** *(Data Center only)*
     - **Description:** Initiates a full reindex of Insight (not supported in Cloud).
     - **Returns:** Confirmation of the reindex operation.
 
-27. **`reindex_current_node_insight()`** *(Data Center only)*
+28. **`reindex_current_node_insight()`** *(Data Center only)*
     - **Description:** Reindexes the current node in Insight (not supported in Cloud).
     - **Returns:** Confirmation of the reindex operation for the current node.
     
