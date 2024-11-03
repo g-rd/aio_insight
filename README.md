@@ -1,7 +1,3 @@
-Here's an expanded README with detailed descriptions for each method's functionality and return values:
-
----
-
 # AIOInsight - Asynchronous Jira Insight/Assets Client
 
 ## Overview
