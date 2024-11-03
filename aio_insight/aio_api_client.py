@@ -16,6 +16,15 @@ log = logging.getLogger(__name__)
 
 
 class RateLimiter:
+    """
+    Rate limiter class to control the frequency of API requests.
+
+    Attributes:
+        tokens (int): Maximum number of requests per interval.
+        interval (float): Time interval in seconds.
+        next_available (float): Timestamp for when the next request is allowed.
+        lock (asyncio.Lock): Async lock to ensure thread-safe operations.
+    """
     def __init__(self, tokens: int, interval: float):
         self.tokens = tokens
         self.interval = interval
@@ -23,6 +32,7 @@ class RateLimiter:
         self.lock = asyncio.Lock()
 
     async def acquire(self):
+        """Acquire permission to make a request, waiting if necessary."""
         async with self.lock:
             now = time.monotonic()
             if now < self.next_available:
@@ -37,6 +47,19 @@ class RateLimiter:
         pass
 
 class AsyncAtlasRestAPI:
+    """
+    Asynchronous REST API client for interacting with a RESTful Atlas API.
+
+    Attributes:
+        url (str): The base URL for the API.
+        username (Optional[str]): Username for basic authentication.
+        password (Optional[str]): Password for basic authentication.
+        timeout (int): Timeout for API requests in seconds.
+        api_root (str): Root path for API endpoints.
+        api_version (str): Version of the API to use.
+        verify_ssl (bool): Whether to verify SSL certificates.
+        session (AsyncClient): HTTPX session for making async requests.
+    """
     default_headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -57,7 +80,6 @@ class AsyncAtlasRestAPI:
             cookies=None,
             advanced_mode=False,
             kerberos=None,
-            cloud=False,
             proxies=None,
             token=None,
             cert=None,
@@ -74,7 +96,6 @@ class AsyncAtlasRestAPI:
         self.api_version = api_version
         self.cookies = cookies
         self.advanced_mode = advanced_mode
-        self.cloud = cloud
         self.proxies = proxies
         self.cert = cert
 
@@ -111,22 +132,35 @@ class AsyncAtlasRestAPI:
         await self.close()
 
     def _create_basic_session(self, username, password):
+        """Set up basic authentication for the session."""
         self._session.auth = (username, password)
 
     def _create_token_session(self, token):
+        """Add Bearer token authentication to the session headers."""
         self._update_header("Authorization", f"Bearer {token}")
 
     async def close(self):
+        """Close the HTTPX session and clear the cache."""
         # Clear the cache on closing the session
         async with self.cache_lock:
             self.cache.clear()
         await self._session.aclose()
 
     def _update_header(self, key, value):
+        """Update or add a header to the session."""
         self._session.headers[key] = value
 
     @staticmethod
     async def _response_handler(response):
+        """
+        Parse JSON response, handling errors and missing content.
+
+        Args:
+            response (Response): HTTPX response object.
+
+        Returns:
+            Parsed JSON or None if no content.
+        """
         try:
             return response.json()
         except ValueError:
@@ -137,6 +171,16 @@ class AsyncAtlasRestAPI:
             return None
 
     def log_curl_debug(self, method, url, data=None, headers=None, level=logging.DEBUG):
+        """
+        Log the equivalent curl command for debugging purposes.
+
+        Args:
+            method (str): HTTP method.
+            url (str): URL of the request.
+            data (Any): Data sent in the request.
+            headers (Optional[Dict[str, str]]): Request headers.
+            level (int): Logging level.
+        """
         headers = headers or self.default_headers
         message = "curl --silent -X {method} -H {headers} {data} '{url}'".format(
             method=method,
@@ -147,6 +191,17 @@ class AsyncAtlasRestAPI:
         log.log(level=level, msg=message)
 
     def resource_url(self, resource, api_root=None, api_version=None):
+        """
+        Construct the URL for a resource endpoint.
+
+        Args:
+            resource (str): Resource endpoint.
+            api_root (Optional[str]): API root path.
+            api_version (Optional[str]): API version.
+
+        Returns:
+            str: Full URL to the resource.
+        """
         if api_root is None:
             api_root = self.api_root
         if api_version is None:
@@ -154,13 +209,30 @@ class AsyncAtlasRestAPI:
         return "/".join(str(s).strip("/") for s in [api_root, api_version, resource] if s is not None)
 
     @staticmethod
-    def url_joiner(url, path, trailing=None):
-        url_link = "/".join(str(s).strip("/") for s in [url, path] if s is not None)
+    def url_joiner(url, *paths, trailing=None):
+        """
+        Join URL with multiple paths.
+
+        Args:
+            url (str): Base URL.
+            *paths: Paths to append.
+            trailing (Optional[str]): Whether to add trailing slash.
+
+        Returns:
+            str: Constructed URL.
+        """
+        url_link = "/".join(str(s).strip("/") for s in [url, *paths] if s is not None)
         if trailing:
             url_link += "/"
         return url_link
 
     def raise_for_status(self, response: Response):
+        """
+        Raise HTTP errors with custom error message handling.
+
+        Args:
+            response (Response): HTTPX response object.
+        """
         if response.status_code == 401 and response.headers.get("Content-Type") != "application/json;charset=UTF-8":
             raise HTTPError("Unauthorized (401)", response=response)
 
@@ -168,7 +240,7 @@ class AsyncAtlasRestAPI:
             try:
                 j = response.json()
                 if self.url == "https://api.atlassian.com":
-                    error_msg = "\n".join([k + ": " + v for k, v in j.items()])
+                    error_msg = "\n".join([str(k) + ": " + str(v) for k, v in j.items()])
                 else:
                     error_msg_list = j.get("errorMessages", list())
                     errors = j.get("errors", dict())
@@ -198,8 +270,30 @@ class AsyncAtlasRestAPI:
             absolute=False,
             advanced_mode=False,
     ):
+        """
+        Perform an HTTP request.
+
+        Args:
+            method (str): HTTP method.
+            path (str): Endpoint path.
+            data (Optional[Any]): Data to send.
+            json (Optional[Dict]): JSON data to send.
+            flags (Optional[Dict]): URL flags.
+            params (Optional[Dict]): URL parameters.
+            headers (Optional[Dict]): Request headers.
+            files (Optional[Any]): Files to upload.
+            trailing (Optional[str]): Add trailing slash if specified.
+            absolute (bool): If true, use absolute URL.
+            advanced_mode (bool): Enable advanced mode.
+
+        Returns:
+            Response or parsed response content.
+        """
+        # Determine the base URL
+        base_url = None if absolute else (self.api_url if hasattr(self, 'api_url') and self.api_url else self.url)
+
         # Construct the URL
-        url = self.url_joiner(None if absolute else self.url, path, trailing)
+        url = self.url_joiner(base_url, path, trailing)
         params_already_in_url = "?" in url
         if params or flags:
             url += "&" if params_already_in_url else "?"
@@ -254,6 +348,25 @@ class AsyncAtlasRestAPI:
             advanced_mode: bool = False,
             use_cache: bool = True
     ) -> Any:
+        """
+        Perform an HTTP GET request with optional caching.
+
+        Args:
+            path (str): API endpoint path.
+            data (Optional[Dict[str, Any]]): Data to include in the request.
+            flags (Optional[Dict[str, Any]]): URL flags for additional options.
+            params (Optional[Dict[str, Any]]): URL parameters.
+            headers (Optional[Dict[str, str]]): Headers to include in the request.
+            not_json_response (bool): If True, return response content as bytes.
+            trailing (Optional[str]): Adds a trailing slash if specified.
+            absolute (bool): If True, constructs an absolute URL.
+            advanced_mode (bool): If True, returns raw Response object.
+            use_cache (bool): If True, caches the response.
+
+        Returns:
+            Any: Parsed JSON response or raw response content.
+        """
+
         # Create a unique cache key based on the path and parameters
         param_set = frozenset(
             (k, v) if isinstance(v, (str, int, float, bool)) else (
@@ -314,6 +427,23 @@ class AsyncAtlasRestAPI:
             absolute=False,
             advanced_mode=False,
     ):
+        """
+        Perform an HTTP POST request.
+
+        Args:
+            path (str): API endpoint path.
+            data (Optional[Dict[str, Any]]): Data to include in the request body.
+            json (Optional[Dict[str, Any]]): JSON data to include in the request body.
+            headers (Optional[Dict[str, str]]): Headers to include in the request.
+            files (Optional[Dict[str, Any]]): Files to upload.
+            params (Optional[Dict[str, Any]]): URL parameters.
+            trailing (Optional[str]): Adds a trailing slash if specified.
+            absolute (bool): If True, constructs an absolute URL.
+            advanced_mode (bool): If True, returns raw Response object.
+
+        Returns:
+            Any: Parsed JSON response or raw response content.
+        """
         response = await self.request(
             "POST",
             path=path,
@@ -342,6 +472,23 @@ class AsyncAtlasRestAPI:
             absolute=False,
             advanced_mode=False,
     ):
+        """
+        Perform an HTTP PUT request.
+
+        Args:
+            path (str): API endpoint path.
+            data (Optional[Dict[str, Any]]): Data to include in the request body.
+            json (Optional[Dict[str, Any]]): JSON data to include in the request body.
+            headers (Optional[Dict[str, str]]): Headers to include in the request.
+            files (Optional[Dict[str, Any]]): Files to upload.
+            params (Optional[Dict[str, Any]]): URL parameters.
+            trailing (Optional[str]): Adds a trailing slash if specified.
+            absolute (bool): If True, constructs an absolute URL.
+            advanced_mode (bool): If True, returns raw Response object.
+
+        Returns:
+            Any: Parsed JSON response or raw response content.
+        """
         response = await self.request(
             "PUT",
             path=path,
@@ -369,6 +516,22 @@ class AsyncAtlasRestAPI:
             absolute=False,
             advanced_mode=False,
     ):
+        """
+        Perform an HTTP PATCH request.
+
+        Args:
+            path (str): API endpoint path.
+            data (Optional[Dict[str, Any]]): Data to include in the request body.
+            headers (Optional[Dict[str, str]]): Headers to include in the request.
+            files (Optional[Dict[str, Any]]): Files to upload.
+            params (Optional[Dict[str, Any]]): URL parameters.
+            trailing (Optional[str]): Adds a trailing slash if specified.
+            absolute (bool): If True, constructs an absolute URL.
+            advanced_mode (bool): If True, returns raw Response object.
+
+        Returns:
+            Any: Parsed JSON response or raw response content.
+        """
         response = await self.request(
             "PATCH",
             path=path,
@@ -394,6 +557,21 @@ class AsyncAtlasRestAPI:
             absolute=False,
             advanced_mode=False,
     ):
+        """
+        Perform an HTTP DELETE request.
+
+        Args:
+            path (str): API endpoint path.
+            data (Optional[Dict[str, Any]]): Data to include in the request body.
+            headers (Optional[Dict[str, str]]): Headers to include in the request.
+            params (Optional[Dict[str, Any]]): URL parameters.
+            trailing (Optional[str]): Adds a trailing slash if specified.
+            absolute (bool): If True, constructs an absolute URL.
+            advanced_mode (bool): If True, returns raw Response object.
+
+        Returns:
+            Any: Parsed JSON response or raw response content.
+        """
         response = await self.request(
             "DELETE",
             path=path,
@@ -410,16 +588,45 @@ class AsyncAtlasRestAPI:
 
     @property
     def session(self):
-        """Providing access to the restricted field"""
+        """
+        Return the current HTTP session.
+
+        Returns:
+            AsyncClient: The current HTTPX session instance.
+        """
         return self._session
 
 
 class RateLimitedAsyncAtlassianRestAPI(AsyncAtlasRestAPI):
+    """
+    Rate-limited extension of AsyncAtlasRestAPI.
+
+    Attributes:
+        rate_limiter (RateLimiter): Rate limiter instance to control request frequency.
+    """
     def __init__(self, rate_limiter=None, *args, **kwargs):
+        """
+        Initialize the rate-limited API client.
+
+        Args:
+            rate_limiter (RateLimiter): Optional rate limiter instance.
+            *args: Additional positional arguments for the parent class.
+            **kwargs: Additional keyword arguments for the parent class.
+        """
         super().__init__(*args, **kwargs)
         self.rate_limiter = rate_limiter
 
     async def request(self, *args, **kwargs):
+        """
+        Perform an HTTP request with rate limiting if configured.
+
+        Args:
+            *args: Positional arguments for the request.
+            **kwargs: Keyword arguments for the request.
+
+        Returns:
+            Any: JSON or raw response content.
+        """
         if self.rate_limiter:
             async with self.rate_limiter:
                 return await super().request(*args, **kwargs)
