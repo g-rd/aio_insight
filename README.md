@@ -209,7 +209,4 @@ if __name__ == "__main__":
 27. **`reindex_current_node_insight()`** *(Data Center only)*
     - **Description:** Reindexes the current node in Insight (not supported in Cloud).
     - **Returns:** Confirmation of the reindex operation for the current node.
-
----
-
-Each method’s functionality and return type is now fully described for clear understanding. Let me know if you need further adjustments!
+    
