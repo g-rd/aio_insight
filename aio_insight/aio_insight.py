@@ -1,11 +1,45 @@
 import logging
 from typing import List, Dict, Any
 import aiofiles
-import httpx
+
+import hashlib
+import json
+from cachetools import TTLCache
+import asyncio  # For the async lock
+
 
 from aio_insight.aio_api_client import RateLimitedAsyncAtlassianRestAPI, RateLimiter
 
 log = logging.getLogger(__name__)
+
+def async_ttl_cache(ttl: int, maxsize: int = 1000):
+    def decorator(func):
+        cache = TTLCache(maxsize=maxsize, ttl=ttl)
+        lock = asyncio.Lock()
+
+        async def wrapper(self, *args, **kwargs):
+            # Serialize arguments to create a cache key
+            args_serialized = json.dumps(args, sort_keys=True, default=str)
+            kwargs_serialized = json.dumps(kwargs, sort_keys=True, default=str)
+            cache_key = hashlib.sha256(f"{func.__name__}:{args_serialized}:{kwargs_serialized}".encode()).hexdigest()
+
+            async with lock:
+                try:
+                    return cache[cache_key]
+                except KeyError:
+                    pass  # Cache miss
+
+            # Call the original function
+            result = await func(self, *args, **kwargs)
+
+            async with lock:
+                cache[cache_key] = result
+
+            return result
+
+        return wrapper
+    return decorator
+
 
 class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
     def __init__(
@@ -13,9 +47,11 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             *,
             url: str,
             cloud: bool = False,
+            cache_size=1000,
+            cache_ttl=5,
             **kwargs
     ):
-        default_rate_limiter = RateLimiter(tokens=40, interval=1)
+        default_rate_limiter = RateLimiter(tokens=100, interval=1)
         rate_limiter = kwargs.pop('rate_limiter', default_rate_limiter)
 
         # Remove 'api_root' from kwargs to prevent conflicts
@@ -28,8 +64,13 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             url=url,
             api_root=api_root,
             rate_limiter=rate_limiter,
+            cache_size=1000,
+            cache_ttl=5,
             **kwargs
         )
+
+        self._get_objects_by_aql_cache = TTLCache(maxsize=cache_size, ttl=cache_ttl)
+        self._cache_lock = asyncio.Lock()  # For thread safety in async context
 
         self.default_headers = {"Accept": "application/json"}
 
@@ -262,6 +303,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         url = self.url_joiner(self.api_root, "index/reindex/currentnode")
         return await self.post(url)
 
+    @async_ttl_cache(ttl=300)
     async def get_object_schemas(self) -> Dict[str, str]:
         """
         Retrieves all object schemas.
@@ -276,6 +318,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         result = await self.get(url)
         return result
 
+    @async_ttl_cache(ttl=300)
     async def get_object_schema(self, schema_id: int) -> Dict[str, str]:
         """
         Retrieves information about an object schema based on its ID.
@@ -324,6 +367,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         body = {"name": name, "description": description}
         return await self.put(url, json=body)
 
+    @async_ttl_cache(ttl=300)
     async def get_object_schema_object_types(self, schema_id: int) -> List[Dict[str, str]]:
         """
         Retrieves all object types for a given object schema.
@@ -340,6 +384,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         )
         return await self.get(url)
 
+    @async_ttl_cache(ttl=300)
     async def get_object_schema_object_types_flat(self, schema_id: int) -> List[Dict[str, str]]:
         """
         Retrieves all object types for a given object schema in a flat structure.
@@ -356,6 +401,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
         )
         return await self.get(url)
 
+    @async_ttl_cache(ttl=300)
     async def get_object_schema_object_attributes(self, schema_id,
                                                   only_value_editable=False,
                                                   order_by_name=False,
@@ -401,6 +447,11 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
 
         return await self.get(url, params=params)
 
+    def _compute_get_objects_by_aql_cache_key(self, payload: Dict[str, Any]) -> str:
+        data_json = json.dumps(payload, sort_keys=True)
+        cache_key = hashlib.sha256(data_json.encode('utf-8')).hexdigest()
+        return cache_key
+
     async def get_objects_by_aql(
             self,
             schema_id: int,
@@ -409,6 +460,7 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             page: int = 1,
             results_per_page: int = 25,
             include_attributes: bool = True,
+            use_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         Retrieves a list of objects based on an AQL query.
@@ -419,6 +471,8 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             aql_query (str): The AQL query string
             page (int, optional): The page number (default is 1)
             results_per_page (int, optional): Number of results per page (default is 25)
+            include_attributes (bool, optional): Whether to include attributes in the response
+            use_cache (bool, optional): Whether to use caching (default is True)
 
         Returns:
             dict: The response containing matching objects
@@ -432,11 +486,30 @@ class AsyncInsight(RateLimitedAsyncAtlassianRestAPI):
             "objectSchemaId": schema_id,
             "qlQuery": aql_query
         }
+
+        cache_key = self._compute_get_objects_by_aql_cache_key(payload)
+
+        if use_cache:
+            async with self._cache_lock:
+                try:
+                    # Check if the result is in the cache
+                    return self._get_objects_by_aql_cache[cache_key]
+                except KeyError:
+                    pass  # Cache miss; proceed to fetch data
+
+        # Make the API request
         result = await self.post(
             path=self.url_joiner(self.api_root, "object/navlist/aql"),
             json=payload
         )
+
+        if use_cache:
+            async with self._cache_lock:
+                # Store the result in cache
+                self._get_objects_by_aql_cache[cache_key] = result
+
         return result
+
 
     async def get_object(self, object_id: int) -> Dict[str, str]:
         """

@@ -25,6 +25,8 @@ setup(
         "oauthlib==3.2.2",
         "six==1.16.0",
         "sniffio==1.3.1",
+        "tenacity~=9.0.0",
+        "cachetools~=5.5.0"
     ],
     classifiers=[  # Metadata for the package
         "Programming Language :: Python :: 3",
