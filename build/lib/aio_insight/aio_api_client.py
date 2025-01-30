@@ -3,14 +3,11 @@ import time
 import logging
 from json import dumps
 from typing import Optional, Dict, Tuple, Any, Union, FrozenSet, List
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from hashlib import sha256
-import httpx
-from httpx import Response, AsyncClient, Limits, HTTPError
-from cachetools import TTLCache
-from six.moves.urllib.parse import urlencode
 
 import httpx
+from httpx import Response, AsyncClient, Limits, HTTPError
+
+from six.moves.urllib.parse import urlencode
 
 CacheKeyType = Tuple[str, FrozenSet[Tuple[str, Union[str, Tuple[str, str]]]], FrozenSet[Tuple[str, Union[str, Tuple[str, str]]]]]
 
@@ -73,7 +70,7 @@ class AsyncAtlasRestAPI:
             url,
             username=None,
             password=None,
-            timeout=120,
+            timeout=75,
             api_root="rest/api",
             api_version="latest",
             verify_ssl=True,
@@ -86,11 +83,9 @@ class AsyncAtlasRestAPI:
             proxies=None,
             token=None,
             cert=None,
-            max_connections=40,
-            max_keepalive_connections=40,
-            keepalive_expiry=120,
-            cache_size=1000,
-            cache_ttl=5
+            max_connections=100,
+            max_keepalive_connections=20,
+            keepalive_expiry=60,
     ):
         self.url = url
         self.username = username
@@ -104,9 +99,10 @@ class AsyncAtlasRestAPI:
         self.proxies = proxies
         self.cert = cert
 
-        # Initialize the cache and lock
-        self._cache = TTLCache(maxsize=cache_size, ttl=cache_ttl)
-        self._cache_lock = asyncio.Lock()
+        # Cache and concurrency management
+        self.cache: Dict[Tuple[str, FrozenSet[Tuple[str, Union[str, Tuple[str, str]]]], FrozenSet[Tuple[str, Union[str, Tuple[str, str]]]]], Tuple[Any, float]] = {}
+        self.cache_expiry_time = 300  # Cache expiration time in seconds (5 minutes)
+        self.cache_lock = asyncio.Lock()  # Lock for concurrency control
 
         limits = Limits(max_connections=max_connections, max_keepalive_connections=max_keepalive_connections,
                         keepalive_expiry=keepalive_expiry)
@@ -146,8 +142,8 @@ class AsyncAtlasRestAPI:
     async def close(self):
         """Close the HTTPX session and clear the cache."""
         # Clear the cache on closing the session
-        async with self._cache_lock:
-            self._cache.clear()
+        async with self.cache_lock:
+            self.cache.clear()
         await self._session.aclose()
 
     def _update_header(self, key, value):
@@ -260,12 +256,6 @@ class AsyncAtlasRestAPI:
                 log.error(response.content)  # Log the error message
                 raise HTTPError(error_msg)  # Include error_msg in the exception
 
-
-    @retry(
-        stop=stop_after_attempt(5),  # Retry up to 5 times
-        wait=wait_exponential(min=1, max=10),  # Exponential backoff (1-10 seconds)
-        retry=retry_if_exception_type((httpx.RemoteProtocolError, httpx.RequestError, httpx.TimeoutException)),
-    )
     async def request(
             self,
             method="GET",
@@ -281,7 +271,7 @@ class AsyncAtlasRestAPI:
             advanced_mode=False,
     ):
         """
-        Perform an HTTP request with retry logic.
+        Perform an HTTP request.
 
         Args:
             method (str): HTTP method.
@@ -345,29 +335,6 @@ class AsyncAtlasRestAPI:
             log.error(f"Error response {exc.response.status_code} while requesting {exc.request.url!r}.")
             raise
 
-    @staticmethod
-    def serialize(obj):
-        if isinstance(obj, (str, int, float, bool)):
-            return str(obj)
-        elif isinstance(obj, (list, tuple)):
-            return str([AsyncAtlasRestAPI.serialize(item) for item in obj])
-        elif isinstance(obj, dict):
-            return str({k: AsyncAtlasRestAPI.serialize(v) for k, v in sorted(obj.items())})
-        else:
-            return str(obj)
-
-
-    @staticmethod
-    def serialize(obj):
-        if isinstance(obj, (str, int, float, bool)):
-            return str(obj)
-        elif isinstance(obj, (list, tuple)):
-            return str([AsyncAtlasRestAPI.serialize(item) for item in obj])
-        elif isinstance(obj, dict):
-            return str({k: AsyncAtlasRestAPI.serialize(v) for k, v in sorted(obj.items())})
-        else:
-            return str(obj)
-
     async def get(
             self,
             path: str,
@@ -381,28 +348,41 @@ class AsyncAtlasRestAPI:
             advanced_mode: bool = False,
             use_cache: bool = True
     ) -> Any:
-        # Compute a unique cache key
-        cache_key = sha256(self.serialize({
-            'method': 'GET',
-            'path': path,
-            'params': params,
-            'data': data,
-            'headers': headers,
-            'flags': flags,
-        }).encode()).hexdigest()
+        """
+        Perform an HTTP GET request with optional caching.
 
-        if use_cache:
-            async with self._cache_lock:
-                try:
-                    # Attempt to retrieve the cached response
-                    cached_response = self._cache[cache_key]
-                    log.info("Returning cached response for %s", path)
-                    return cached_response
-                except KeyError:
-                    # Cache miss
-                    pass
+        Args:
+            path (str): API endpoint path.
+            data (Optional[Dict[str, Any]]): Data to include in the request.
+            flags (Optional[Dict[str, Any]]): URL flags for additional options.
+            params (Optional[Dict[str, Any]]): URL parameters.
+            headers (Optional[Dict[str, str]]): Headers to include in the request.
+            not_json_response (bool): If True, return response content as bytes.
+            trailing (Optional[str]): Adds a trailing slash if specified.
+            absolute (bool): If True, constructs an absolute URL.
+            advanced_mode (bool): If True, returns raw Response object.
+            use_cache (bool): If True, caches the response.
 
-        # Make the API request
+        Returns:
+            Any: Parsed JSON response or raw response content.
+        """
+
+        # Create a unique cache key based on the path and parameters
+        param_set = frozenset(
+            (k, v) if isinstance(v, (str, int, float, bool)) else (
+            k, tuple(v) if isinstance(v, (list, tuple)) else str(v))
+            for k, v in (params or {}).items()
+        )
+        cache_key: CacheKeyType = (path, param_set, param_set)
+
+        # Check if a cached response is available and valid
+        if use_cache and cache_key in self.cache:
+            cached_response, timestamp = self.cache[cache_key]
+            if time.monotonic() - timestamp < self.cache_expiry_time:
+                log.info("Returning cached response for %s", path)
+                return cached_response
+
+        # Make the HTTP GET request if no valid cache is available
         response = await self.request(
             "GET",
             path=path,
@@ -415,6 +395,7 @@ class AsyncAtlasRestAPI:
             advanced_mode=advanced_mode,
         )
 
+        # Return the parsed or raw response based on flags
         if self.advanced_mode or advanced_mode:
             return response
 
@@ -427,9 +408,8 @@ class AsyncAtlasRestAPI:
         try:
             json_response = response.json()
             if use_cache:
-                async with self._cache_lock:
-                    # Store the response in the cache
-                    self._cache[cache_key] = json_response
+                # Cache the JSON response
+                self.cache[cache_key] = (json_response, time.monotonic())
             return json_response
         except Exception as e:
             log.error("Error parsing JSON response: %s", str(e))

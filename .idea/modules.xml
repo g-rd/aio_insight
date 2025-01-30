@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/AioInsight.iml" filepath="$PROJECT_DIR$/.idea/AioInsight.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../AtlasAssetsManager/.idea/AtlasAssetsManager.iml" filepath="$PROJECT_DIR$/../AtlasAssetsManager/.idea/AtlasAssetsManager.iml" />
     </modules>
   </component>
 </project>

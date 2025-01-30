@@ -1,0 +1,15 @@
+LICENSE
+README.md
+pyproject.toml
+setup.py
+aio_insight/__init__.py
+aio_insight/aio_api_client.py
+aio_insight/aio_insight.py
+aio_insight/aio_query_insight.py
+aio_insight.egg-info/PKG-INFO
+aio_insight.egg-info/SOURCES.txt
+aio_insight.egg-info/dependency_links.txt
+aio_insight.egg-info/requires.txt
+aio_insight.egg-info/top_level.txt
+tests/__init__.py
+tests/test_aio_insight.py
